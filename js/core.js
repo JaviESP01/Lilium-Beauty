@@ -250,7 +250,7 @@ async function initCloud(){
  if(!sb){setSyncState('local');return}
  try{const {data}=await sb.auth.getSession();cloudUser=data.session?.user||null;
   sb.auth.onAuthStateChange((event,session)=>{const was=cloudUser?.id;cloudUser=session?.user||null;
-   if(event==='PASSWORD_RECOVERY')setTimeout(()=>openNewPassword(),300);
+   if(event==='PASSWORD_RECOVERY')setTimeout(()=>openNewPassword(true),300);
    if(!cloudUser)setSyncState('local');else if(was!==cloudUser.id)syncCloud('smart',true);
    updateSyncPill()});
  }catch(e){console.warn('Sesión de nube no disponible',e)}

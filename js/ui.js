@@ -1,6 +1,7 @@
 /* Lilium · interfaz común: marco, navegación, avisos, ventanas, menús */
 const ic=(n,c)=>ART.icon(n,c);
-const NAV=[['home','Inicio','house'],['agenda','Agenda','calendar'],['clients','Clientas','person'],['services','Servicios','wrench'],['finance','Finanzas','chartline'],['settings','Ajustes','cog']];
+const NAV=[['home','Inicio','house'],['agenda','Agenda','calendar'],['clients','Clientas','person'],['catalog','Catálogo','image'],['services','Servicios','wrench'],['finance','Finanzas','chartline'],['settings','Ajustes','cog']];
+const TAB_MAIN=['home','agenda','clients','catalog'];
 const CLIENT_ROUTE='client';
 const view={agendaDate:new Date(),agendaView:window.innerWidth<760?'day':'week',clientQuery:'',clientFilter:'all',apptQuery:'',apptStatus:'all',serviceCat:'Todos',summaryRange:'day',financeMonth:null,clientTab:'data'};
 let currentClientId=null,pendingRefresh=false;
@@ -75,7 +76,10 @@ function toggleTheme(){A.settings.theme=isDark()?'light':'dark';save();applySett
 /* Marco de la aplicación */
 function layout(pg,active){
  const s=A.settings;
- const nav=NAV.map(([k,l,i])=>`<button class="${active===k?'active':''}" onclick="go('${k}')" ${active===k?'aria-current="page"':''}>${ic(i)}<span>${l}</span></button>`).join('');
+ const badge=k=>k==='catalog'&&typeof catalogNewCount==='function'&&catalogNewCount()?`<em class="nav-badge">${catalogNewCount()}</em>`:'';
+ const navBtn=([k,l,i])=>`<button class="${active===k?'active':''}" onclick="go('${k}')" ${active===k?'aria-current="page"':''}>${ic(i)}<span>${l}</span>${badge(k)}</button>`;
+ const nav=NAV.map(navBtn).join('');
+ const tabs=NAV.filter(n=>TAB_MAIN.includes(n[0])).map(navBtn).join('')+`<button class="${TAB_MAIN.includes(active)?'':'active'}" onclick="moreMenu(event)">${ic('more')}<span>Más</span></button>`;
  const now=new Date();
  return `<div class="app">
  <aside class="sidebar">
@@ -100,12 +104,14 @@ function layout(pg,active){
   </header>
   <div class="view">${pg.body}</div>
  </main>
- <nav class="tabbar" aria-label="Principal">${nav}</nav>
+ <nav class="tabbar" aria-label="Principal">${tabs}</nav>
 </div>`;
 }
 setInterval(()=>{const c=document.getElementById('clock');if(c){const n=new Date();c.textContent=pad(n.getHours())+':'+pad(n.getMinutes())}},15000);
+function moreMenu(ev){openMenu(ev,NAV.filter(n=>!TAB_MAIN.includes(n[0])).map(([k,l,i])=>({label:l,icon:i,action:()=>go(k)})))}
 function profileMenu(ev){openMenu(ev,[
  {label:cloudUser?'Cuenta y nube':'Iniciar sesión en la nube',icon:'cloud',action:openCloud},
+ cloudUser?{label:'Cambiar contraseña',icon:'lock',action:()=>openNewPassword()}:null,
  {label:'Ajustes',icon:'cog',action:()=>go('settings')},
  {label:'Novedades',icon:'sparkles',action:showWhatsNew},
  A.settings.pinEnabled?{label:'Bloquear',icon:'lock',action:lockApp}:null,
@@ -120,7 +126,7 @@ function emptyState(title,text,action=''){return `<div class="empty"><div class=
 
 function render(){
  const p=route();
- const pages={home,clients:clientsPage,agenda:agendaPage,services:servicesPage,finance:financePage,settings:settingsPage};
+ const pages={home,clients:clientsPage,agenda:agendaPage,catalog:catalogPage,services:servicesPage,finance:financePage,settings:settingsPage};
  const app=document.getElementById('app');
  closeMenu();
  if(needsLogin())return showLogin();

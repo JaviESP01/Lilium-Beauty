@@ -40,6 +40,7 @@ function home(){
    ${tasksCard()}
   </div>
  </div>
+ ${typeof catalogHomeCard==='function'&&catalogHomeCard()?`<div class="web-new-wrap">${catalogHomeCard()}</div>`:''}
  <div class="home-grid two">
   ${tomorrowCard()}
   ${birthdayCard()}

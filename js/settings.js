@@ -124,11 +124,39 @@ async function cloudLogin(){
  const {data,error}=await sb.auth.signInWithPassword({email,password});
  if(error){btn.disabled=false;btn.innerHTML='Iniciar sesión '+ic('arrow');return toast(/invalid/i.test(error.message)?'Correo o contraseña incorrectos':error.message)}
  const rem=document.getElementById('remember');if(rem&&!rem.checked){lsSet('lilium_forget','1');ssSet('lilium_alive','1')}else lsDel('lilium_forget');
- cloudUser=data.user;closeModal();render();toast('Sesión iniciada');await syncCloud('smart',false);render();checkWhatsNew();
+ cloudUser=data.user;closeModal();render();toast('Sesión iniciada');loadCatalog(true);await syncCloud('smart',false);render();checkWhatsNew();
 }
 async function resetPassword(){const email=document.getElementById('cloudEmail')?.value.trim();if(!email)return toast('Escribe primero tu correo');const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});toast(error?error.message:'Te hemos enviado un correo para cambiarla',4000)}
-function openNewPassword(){openModal(`<h2 class="modal-title">Nueva contraseña</h2><form onsubmit="event.preventDefault();saveNewPassword()"><div class="field"><label for="newPass">Contraseña nueva</label><input id="newPass" type="password" minlength="8" autocomplete="new-password" required><small class="field-hint">Mínimo 8 caracteres.</small></div><div class="modal-actions"><button class="btn">Guardar contraseña</button></div></form>`,{cls:'small'})}
-async function saveNewPassword(){const p=document.getElementById('newPass').value;const {error}=await sb.auth.updateUser({password:p});if(error)return toast(error.message);closeModal();toast('Contraseña cambiada')}
+let pwRecovery=false;
+function pwField(id,label,ac,hint=''){return `<div class="field pw"><label for="${id}">${label}</label><input id="${id}" type="password" autocomplete="${ac}" required><button type="button" class="eye" aria-label="Mostrar contraseña" onclick="const i=document.getElementById('${id}');i.type=i.type==='password'?'text':'password';this.innerHTML=ART.icon(i.type==='password'?'eyeoff':'eye')">${ic('eyeoff')}</button>${hint}</div>`}
+function openNewPassword(recovery=false){
+ pwRecovery=recovery===true;
+ openModal(`<h2 class="modal-title">${pwRecovery?'Elige tu nueva contraseña':'Cambiar contraseña'}</h2><p class="modal-text">${pwRecovery?'Escribe la contraseña que quieras usar a partir de ahora.':'Por seguridad, primero escribe la contraseña que usas ahora.'}</p>
+ <form onsubmit="event.preventDefault();saveNewPassword()">${pwRecovery?'':pwField('curPass','Contraseña actual','current-password')}${pwField('newPass','Contraseña nueva','new-password','<div class="pw-meter" id="pwMeter"><i></i><span></span></div>')}${pwField('newPass2','Repite la contraseña nueva','new-password')}
+ <p class="hint">Mínimo 8 caracteres. Mejor si mezclas letras, números y algún símbolo.</p>
+ <p class="form-err" id="pwErr" role="alert"></p>
+ <div class="modal-actions">${pwRecovery?'':'<button type="button" class="btn ghost" onclick="closeModal()">Cancelar</button>'}<button class="btn" id="pwBtn">${ic('lock')}Guardar contraseña</button></div></form>`,{cls:'small'});
+ const np=document.getElementById('newPass');np.addEventListener('input',()=>{const v=np.value;let s=0;if(v.length>=8)s++;if(v.length>=12)s++;if(/[A-Z]/.test(v)&&/[a-z]/.test(v))s++;if(/\d/.test(v))s++;if(/[^A-Za-z0-9]/.test(v))s++;const m=document.getElementById('pwMeter');m.dataset.s=Math.min(4,s);m.querySelector('span').textContent=v?['Muy débil','Débil','Aceptable','Buena','Muy buena'][Math.min(4,s)]:''});
+}
+async function saveNewPassword(){
+ const g=id=>document.getElementById(id)?.value||'';const err=document.getElementById('pwErr');const btn=document.getElementById('pwBtn');err.textContent='';
+ const p=g('newPass'),p2=g('newPass2');
+ if(p.length<8)return err.textContent='La contraseña nueva debe tener al menos 8 caracteres.';
+ if(p!==p2)return err.textContent='Las dos contraseñas nuevas no coinciden.';
+ if(!sb||!cloudUser)return err.textContent='Necesitas tener la sesión iniciada.';
+ btn.disabled=true;
+ try{
+  if(!pwRecovery){
+   const cur=g('curPass');if(!cur){btn.disabled=false;return err.textContent='Escribe tu contraseña actual.'}
+   if(cur===p){btn.disabled=false;return err.textContent='La nueva contraseña tiene que ser distinta de la actual.'}
+   const {error:e1}=await sb.auth.signInWithPassword({email:cloudUser.email,password:cur});
+   if(e1){btn.disabled=false;return err.textContent='La contraseña actual no es correcta.'}
+  }
+  const {error}=await sb.auth.updateUser({password:p});
+  if(error){btn.disabled=false;return err.textContent=/same|different/i.test(error.message)?'La nueva contraseña tiene que ser distinta de la actual.':/weak|pwned|leak/i.test(error.message)?'Esa contraseña es demasiado fácil o ha aparecido en filtraciones. Elige otra.':error.message}
+  pwRecovery=false;closeModal();toast('Contraseña cambiada. Úsala la próxima vez que entres.',3500);
+ }catch(e){btn.disabled=false;err.textContent='No se pudo cambiar: revisa la conexión.'}
+}
 async function cloudLogout(){if(!sb||!cloudUser)return;if(!await ask({title:'¿Cerrar la sesión de la nube?',text:'Los datos se quedan guardados en este dispositivo y en la nube.',ok:'Cerrar sesión'}))return;await syncCloud('smart',true);await sb.auth.signOut();cloudUser=null;lsDel(K.lastSync);lsDel(K.merge);setSyncState('local');render();toast('Sesión cerrada')}
 
 /* Datos */
@@ -174,4 +202,4 @@ function bootApp(){
  }catch(err){console.error('Error al iniciar:',err);document.getElementById('app').innerHTML=`<div class="crash"><h1>No se ha podido abrir la aplicación</h1><p>Recarga la página. Tus datos siguen guardados.</p><details><summary>Detalles técnicos</summary><pre>${esc(err?.stack||err?.message||String(err))}</pre></details></div>`}
 }
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-initCloud().then(async()=>{if(cloudUser&&lsGet('lilium_forget')==='1'&&ssGet('lilium_alive')!=='1'){try{await sb.auth.signOut()}catch{}cloudUser=null;setSyncState('local')}}).finally(()=>{bootApp();if(cloudUser)syncCloud('smart',true)});
+initCloud().then(async()=>{if(cloudUser&&lsGet('lilium_forget')==='1'&&ssGet('lilium_alive')!=='1'){try{await sb.auth.signOut()}catch{}cloudUser=null;setSyncState('local')}}).finally(()=>{bootApp();if(cloudUser){syncCloud('smart',true);loadCatalog()}});
