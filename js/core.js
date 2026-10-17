@@ -1,6 +1,6 @@
 /* Lilium · Gestión de clientas — v23 · núcleo: datos, guardado y nube */
 'use strict';
-const APP_VERSION='23';
+const APP_VERSION='24';
 const STORE={clients:'manicure_clients',services:'manicure_services',appointments:'manicure_appointments',expenses:'manicure_expenses',tasks:'manicure_tasks',settings:'manicure_settings',trash:'manicure_trash'};
 const COLLS=['clients','services','appointments','expenses','tasks'];
 const K={localUpdated:'manicure_cloud_local_updated',lastSync:'manicure_cloud_last_sync',initialized:'manicure_cloud_initialized',merge:'manicure_cloud_merge_v23',whatsnew:'manicure_whatsnew_seen',unlocked:'manicure_unlocked'};
@@ -65,6 +65,7 @@ function normalizeData(d){
  if(!d.trash||typeof d.trash!=='object'||Array.isArray(d.trash))d.trash={};
  ['clients','services','appointments'].forEach(k=>{if(!Array.isArray(d.trash[k]))d.trash[k]=[]});
  if(!d.trash.removed||typeof d.trash.removed!=='object')d.trash.removed={};
+ if(!d.trash.erased||typeof d.trash.erased!=='object')d.trash.erased={};
  const s=(d.settings&&typeof d.settings==='object')?d.settings:{};
  d.settings={...defaults.settings,...s,notifications:{...defaults.settings.notifications,...(s.notifications||{})},security:{...defaults.settings.security,...(s.security||{})},messages:{...DEFAULT_MESSAGES,...(s.messages||{})}};
  if(!d.settings.accent||OLD_ACCENTS.includes(String(d.settings.accent).toLowerCase()))d.settings.accent=ACCENTS[0][0];
@@ -194,9 +195,10 @@ function mergeColl(L,R,removed){
 }
 function mergeData(L,R){
  const removed={...R.trash.removed};for(const [id,t] of Object.entries(L.trash.removed||{}))if(!removed[id]||t>removed[id])removed[id]=t;
- const out={settings:(L.settings.updatedAt||'')>=(R.settings.updatedAt||'')?L.settings:R.settings,trash:{removed}};
+ const erased={...(R.trash.erased||{}),...(L.trash.erased||{})};
+ const out={settings:(L.settings.updatedAt||'')>=(R.settings.updatedAt||'')?L.settings:R.settings,trash:{removed,erased}};
  COLLS.forEach(k=>out[k]=mergeColl(L[k]||[],R[k]||[],removed));
- ['clients','services','appointments'].forEach(k=>{const alive=new Set(out[k].map(x=>x.id));const seen=new Set();out.trash[k]=[...L.trash[k],...R.trash[k]].filter(x=>{const key=x.id+'|'+x.deletedAt;if(seen.has(key)||alive.has(x.id))return false;seen.add(key);return true})});
+ ['clients','services','appointments'].forEach(k=>{const alive=new Set(out[k].map(x=>x.id));const seen=new Set();out.trash[k]=[...L.trash[k],...R.trash[k]].filter(x=>{const key=x.id+'|'+x.deletedAt;if(seen.has(key)||alive.has(x.id)||erased[x.id])return false;seen.add(key);return true})});
  pruneRemoved(removed);
  return out;
 }

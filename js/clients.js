@@ -88,7 +88,9 @@ function clientMenu(ev){const c=currentClient();openMenu(ev,[
  {label:'Nueva cita',icon:'pluscircle',action:()=>openAppt(null,'',c.id)},
  c.phone?{label:'Escribir por WhatsApp',icon:'whatsapp',action:()=>openWhatsApp(c.phone,`Hola ${c.name.split(' ')[0]} 🌸`)}:null,
  c.phone?{label:'Llamar',icon:'phone',action:()=>{location.href='tel:'+c.phone.replace(/\s/g,'')}}:null,
- '-',{label:'Eliminar ficha',icon:'trash2',danger:true,action:()=>deleteClient(c.id)}])}
+ '-',{label:'Descargar sus datos (RGPD)',icon:'download',action:()=>exportClientData(c.id)},
+ {label:'Eliminar ficha',icon:'trash2',danger:true,action:()=>deleteClient(c.id)},
+ {label:'Borrar todo para siempre (RGPD)',icon:'shield',danger:true,action:()=>eraseClientForever(c.id)}])}
 function scriptTitle(t,sub=''){return `<div class="script-head"><span class="sh-star">${ART.sparkle?'':''}✦</span><h2 class="script">${t}</h2>${sub?`<p class="muted">${sub}</p>`:''}<span class="sh-deco">${ART.sprig()}</span></div>`}
 
 /* Pestaña: datos */
@@ -115,6 +117,7 @@ function tabData(c,st,state){
    <div class="sub-card"><h3>Recordatorios</h3>${tasks.map(t=>`<div class="mini-task"><button class="check-btn" onclick="toggleTask('${t.id}')" aria-label="Hecho">${ic('checkbox')}</button><span>${esc(t.text)}${t.due?`<small>${fmtShort(t.due)}</small>`:''}</span><button class="icon-btn tiny" aria-label="Eliminar" onclick="deleteTask('${t.id}')">${ic('close')}</button></div>`).join('')}<form class="add-line" onsubmit="event.preventDefault();addTask(this.t.value,'${c.id}');this.reset()"><span>${ic('plus')}</span><input name="t" placeholder="Añadir recordatorio" aria-label="Nuevo recordatorio"></form></div>
    <div class="sub-card"><h3>Preferencias rápidas <button class="icon-btn tiny" aria-label="Editar preferencias" onclick="editPrefs()">${ic('edit')}</button></h3><div class="pref-chips">${prefs.length?prefs.map(p=>`<span class="pchip">${ic('heartfill')}${esc(p)}</span>`).join(''):'<p class="hint">Toca el lápiz para añadir sus gustos.</p>'}</div></div>
    <div class="sub-card"><h3>Alergias o sensibilidades</h3><textarea id="cli_allergies" class="soft-input" rows="2" placeholder="No tiene alergias conocidas.">${esc(c.medical.notes||'')}</textarea></div>
+   ${consentCard(c)}
   `,{cls:'info-card',stamp:'love'})}
  </aside></div>`;
 }

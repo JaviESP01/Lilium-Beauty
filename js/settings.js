@@ -27,6 +27,7 @@ function settingsPage(){
   <button class="row-link danger" onclick="resetApp()">${ic('trash2')}<span><b>Eliminar datos de este dispositivo</b><small>${cloudUser?'Tus datos siguen en la nube.':'Esta acción no se puede deshacer.'}</small></span>${ic('right')}</button>`,{sub:'Gestiona el espacio y tus archivos.'})}
  ${card('Seguridad','shield',`<label class="toggle"><span><b>PIN de acceso</b><small>${s.pinEnabled?'Activado en la aplicación':'Pide un PIN de 4 a 6 cifras al abrir.'}</small></span><input type="checkbox" ${s.pinEnabled?'checked':''} onchange="this.checked?setupPin():disablePin();this.checked=${!!s.pinEnabled}"><i></i></label>${s.pinEnabled?`<button class="link small" onclick="setupPin()">Cambiar PIN</button>`:''}
   <label class="toggle"><span><b>Confirmar antes de eliminar</b><small>Evita borrar fichas o citas sin querer.</small></span><input type="checkbox" ${s.security?.confirmDelete!==false?'checked':''} onchange="A.settings.security.confirmDelete=this.checked;save();toast('Preferencia guardada')"><i></i></label>`,{sub:'Protege el acceso a la aplicación.'})}
+ ${privacyCard()}
  ${card('Agenda','calendar',`<div class="grid-2"><div class="field"><label for="set_ds">Abre a las</label><select id="set_ds" onchange="setSetting('dayStart',+this.value)">${Array.from({length:13},(_,i)=>i+5).map(h=>`<option value="${h}" ${s.dayStart==h?'selected':''}>${pad(h)}:00</option>`).join('')}</select></div><div class="field"><label for="set_de">Cierra a las</label><select id="set_de" onchange="setSetting('dayEnd',+this.value)">${Array.from({length:12},(_,i)=>i+13).map(h=>`<option value="${h}" ${s.dayEnd==h?'selected':''}>${pad(h)}:00</option>`).join('')}</select></div></div><p class="muted small">Horas que se muestran en la vista de día y semana.</p>`,{sub:'Tu horario de trabajo.'})}
  ${card('Acerca de','info',`<p class="about-name">${esc(s.name||'Lilium Beauty')} <span class="h-mini">${ic('heartfill')}</span></p><p class="muted">Versión ${APP_VERSION}</p><button class="row-link" onclick="showWhatsNew()">${ic('sparkles')}<span><b>Novedades</b><small>Lo nuevo de esta versión</small></span>${ic('right')}</button>`,{stamp:'cisne'})}
  </div>`;
@@ -91,8 +92,10 @@ function openCloudInfo(){
 }
 async function forceSync(mode){const ok=await ask({title:mode==='download'?'¿Reemplazar este dispositivo con la nube?':'¿Reemplazar la nube con este dispositivo?',text:mode==='download'?'Lo que solo esté en este dispositivo se perderá.':'Lo que solo esté en la nube (por ejemplo, cambios hechos en el otro dispositivo) se perderá.',ok:'Reemplazar',danger:true});if(ok)syncCloud(mode,false)}
 function openCloudLogin(){lsDel('lilium_offline');ssSet('lilium_login','1');render()}
-function needsLogin(){return !!sb&&!cloudUser&&lsGet('lilium_offline')!=='1'}
-function useOffline(){lsSet('lilium_offline','1');render();checkWhatsNew()}
+// Seguridad: los datos de una cuenta nunca se ven sin iniciar sesión, ni aunque falle la conexión.
+function needsLogin(){return !cloudUser&&(!!sb||!!lsGet('lilium_owner'))}
+function markOwner(){if(cloudUser)lsSet('lilium_owner',cloudUser.id)}
+function wipeLocal(){Object.values(STORE).forEach(lsDel);Object.values(K).forEach(lsDel);['lilium_owner','lilium_offline','lilium_forget'].forEach(lsDel);try{sessionStorage.clear()}catch{}}
 function showLogin(){
  document.getElementById('modal-root').innerHTML='';
  document.getElementById('app').innerHTML=`<div class="login">
@@ -108,9 +111,9 @@ function showLogin(){
     <div class="field with-ic"><span class="f-ic">${ic('lock')}</span><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="Contraseña" required aria-label="Contraseña"><button type="button" class="eye" aria-label="Mostrar contraseña" onclick="const i=document.getElementById('cloudPassword');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?ART.icon('eyeoff'):ART.icon('eye')">${ic('eyeoff')}</button></div>
     <div class="login-row"><label class="check-inline"><input type="checkbox" id="remember" checked><span>Recordarme</span></label><button type="button" class="link" onclick="resetPassword()">¿Olvidaste tu contraseña?</button></div>
     <button id="cloudLoginBtn" class="btn wide grad">Iniciar sesión ${ic('arrow')}</button>
-    <div class="or"><span>o continuar</span></div>
-    <button type="button" class="btn ghost wide" onclick="useOffline()">${ic('monitor')}Usar sin cuenta en este dispositivo</button>
-    <p class="login-foot">Tus datos se guardan en privado con tu cuenta.</p>
+    ${sb?'':`<p class="login-warn">${ic('info')}No hay conexión con la nube. Comprueba internet y <button type="button" class="link" onclick="location.reload()">vuelve a intentarlo</button>.</p>`}
+    <p class="login-foot">${ic('lock')}Acceso privado. Tus datos van cifrados y se guardan en la Unión Europea.</p>
+    <p class="login-legal"><button type="button" class="link" onclick="openPrivacyInfo()">Privacidad</button> · <button type="button" class="link" onclick="openCookieInfo()">Cookies</button></p>
    </form>
   </div>
  </div>`;
@@ -124,7 +127,8 @@ async function cloudLogin(){
  const {data,error}=await sb.auth.signInWithPassword({email,password});
  if(error){btn.disabled=false;btn.innerHTML='Iniciar sesión '+ic('arrow');return toast(/invalid/i.test(error.message)?'Correo o contraseña incorrectos':error.message)}
  const rem=document.getElementById('remember');if(rem&&!rem.checked){lsSet('lilium_forget','1');ssSet('lilium_alive','1')}else lsDel('lilium_forget');
- cloudUser=data.user;closeModal();render();toast('Sesión iniciada');loadCatalog(true);await syncCloud('smart',false);render();checkWhatsNew();
+ if(lsGet('lilium_owner')&&lsGet('lilium_owner')!==data.user.id){wipeLocal();lsSet('lilium_owner',data.user.id);location.reload();return}
+ cloudUser=data.user;markOwner();closeModal();render();toast('Sesión iniciada');loadCatalog(true);await syncCloud('smart',false);render();checkWhatsNew();
 }
 async function resetPassword(){const email=document.getElementById('cloudEmail')?.value.trim();if(!email)return toast('Escribe primero tu correo');const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});toast(error?error.message:'Te hemos enviado un correo para cambiarla',4000)}
 let pwRecovery=false;
@@ -157,7 +161,10 @@ async function saveNewPassword(){
   pwRecovery=false;closeModal();toast('Contraseña cambiada. Úsala la próxima vez que entres.',3500);
  }catch(e){btn.disabled=false;err.textContent='No se pudo cambiar: revisa la conexión.'}
 }
-async function cloudLogout(){if(!sb||!cloudUser)return;if(!await ask({title:'¿Cerrar la sesión de la nube?',text:'Los datos se quedan guardados en este dispositivo y en la nube.',ok:'Cerrar sesión'}))return;await syncCloud('smart',true);await sb.auth.signOut();cloudUser=null;lsDel(K.lastSync);lsDel(K.merge);setSyncState('local');render();toast('Sesión cerrada')}
+async function cloudLogout(){if(!sb||!cloudUser)return;if(!await ask({title:'¿Cerrar sesión?',text:'Por seguridad se borrará la copia de este dispositivo. Todo sigue guardado en tu cuenta y vuelve al iniciar sesión.',ok:'Cerrar sesión'}))return;
+ await syncCloud('smart',true);
+ if(syncState!=='ok'&&!await ask({title:'No se pudo guardar lo último en la nube',text:'Si cierras sesión ahora podrías perder los cambios más recientes de este dispositivo.',ok:'Cerrar igualmente',danger:true}))return;
+ try{await sb.auth.signOut()}catch{}cloudUser=null;wipeLocal();location.hash='home';location.reload()}
 
 /* Datos */
 function exportData(){const stamp=new Date().toLocaleString('es-ES');A.settings.lastBackup=stamp;save();const payload={app:'manicure',version:APP_VERSION,createdAt:new Date().toISOString(),clients:A.clients,services:A.services,appointments:A.appointments,expenses:A.expenses,tasks:A.tasks,settings:{...A.settings,pinHash:'',pin:undefined},trash:A.trash};const blob=new Blob([JSON.stringify(payload,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`manicure-copia-${todayKey()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);render();toast('Copia descargada')}
@@ -182,6 +189,9 @@ async function emptyTrash(){if(!await ask({title:'¿Vaciar la papelera?',text:'L
 function showWhatsNew(){
  openModal(`<div class="news-logo">${logoHtml()}</div><h2 class="modal-title center">Novedades · versión ${APP_VERSION}</h2>
  <ul class="news">
+  <li><b>Más seguridad:</b> sin iniciar sesión no se ve ningún dato, y al cerrar sesión se borra la copia del dispositivo.</li>
+  <li><b>Protección de datos (RGPD):</b> aviso de privacidad para tus clientas, registro de su permiso, descarga y borrado definitivo de sus datos, en Ajustes › Privacidad.</li>
+  <li><b>Datos legales del catálogo:</b> rellénalos en Catálogo › Datos de contacto para que tu web cumpla la ley.</li>
   <li><b>Diseño Lilium Beauty</b> en modo claro y oscuro, con tu logo y tus colores.</li>
   <li><b>Finanzas:</b> apunta gastos y mira ingresos, beneficio y servicios más rentables.</li>
   <li><b>Ficha de clienta nueva:</b> foto de perfil, estado, preferencias, tallas sobre cada dedo e historial de gasto.</li>
@@ -202,4 +212,4 @@ function bootApp(){
  }catch(err){console.error('Error al iniciar:',err);document.getElementById('app').innerHTML=`<div class="crash"><h1>No se ha podido abrir la aplicación</h1><p>Recarga la página. Tus datos siguen guardados.</p><details><summary>Detalles técnicos</summary><pre>${esc(err?.stack||err?.message||String(err))}</pre></details></div>`}
 }
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-initCloud().then(async()=>{if(cloudUser&&lsGet('lilium_forget')==='1'&&ssGet('lilium_alive')!=='1'){try{await sb.auth.signOut()}catch{}cloudUser=null;setSyncState('local')}}).finally(()=>{bootApp();if(cloudUser){syncCloud('smart',true);loadCatalog()}});
+initCloud().then(async()=>{if(cloudUser&&lsGet('lilium_forget')==='1'&&ssGet('lilium_alive')!=='1'){try{await sb.auth.signOut()}catch{}cloudUser=null;wipeLocal();location.reload();return}markOwner()}).finally(()=>{bootApp();if(cloudUser){syncCloud('smart',true);loadCatalog()}});

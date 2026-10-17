@@ -14,6 +14,7 @@ async function loadCatalog(force=false){
  if(!sb||!cloudUser||CAT.loading)return;if(CAT.loaded&&!force)return;
  CAT.loading=true;CAT.error='';
  try{
+  await purgeOldRequests();
   const [d,r,p]=await Promise.all([
    sb.from('catalog_designs').select('*').eq('owner',cloudUser.id).order('sort',{ascending:true}).order('created_at',{ascending:false}),
    sb.from('catalog_requests').select('*').eq('owner',cloudUser.id).order('created_at',{ascending:false}).limit(300),
@@ -172,11 +173,17 @@ function profileView(){
   <p class="hint">Solo se muestra lo que rellenes.</p>
   <label class="toggle"><span><b>Aceptar pedidos y mensajes</b><small>Si lo apagas, el catálogo se sigue viendo pero sin formularios.</small></span><input type="checkbox" id="cp_open" ${p.open!==false?'checked':''}><i></i></label>
   <div class="field"><label for="cp_url">Dirección de tu catálogo</label><input id="cp_url" value="${esc(catalogUrl())}"></div>
-  <button class="btn wide" id="cpSave" onclick="saveCatalogProfile()">${ic('save')}Guardar datos</button>`,{stamp:'avion'})}</div>`;
+  <button class="btn wide" id="cpSave" onclick="saveCatalogProfile()">${ic('save')}Guardar datos</button>`,{stamp:'avion'})}
+ ${card('Datos legales','shield',`
+  <p class="hint">La ley (LSSI y RGPD) obliga a que tu web diga quién es la responsable. Se muestran solo en el «Aviso legal» y la «Política de privacidad» del catálogo.</p>
+  ${f('legal_name','Nombre y apellidos de la titular','África …','person',120)}${f('legal_id','NIF / DNI','12345678Z','',20)}${f('legal_address','Domicilio a efectos de notificaciones','Calle…, Alicante','pin',200)}
+  ${!p.legal_name||!p.legal_id?`<p class="warn-note">${ic('info')}Rellénalos para que tu web cumpla la ley.</p>`:''}
+  <button class="btn soft wide" onclick="saveCatalogProfile()">${ic('save')}Guardar datos</button>`,{sub:'Obligatorios por ley en una web que vende.'})}</div>`;
 }
 async function saveCatalogProfile(){
- const g=k=>document.getElementById('cp_'+k);const row={};['business','tagline','about','city','whatsapp','instagram','tiktok','email'].forEach(k=>row[k]=g(k).value.trim());row.open=g('open').checked;row.updated_at=new Date().toISOString();
+ const g=k=>document.getElementById('cp_'+k);const row={};['business','tagline','about','city','whatsapp','instagram','tiktok','email','legal_name','legal_id','legal_address'].forEach(k=>row[k]=g(k).value.trim());row.open=g('open').checked;row.updated_at=new Date().toISOString();
  const url=g('url').value.trim();if(url&&url!==catalogUrl()){A.settings.catalogUrl=url;save()}
+ if(row.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(row.email))return toast('Revisa el email');
  const btn=document.getElementById('cpSave');btn.disabled=true;
  const {data,error}=await sb.from('catalog_profile').update(row).eq('owner',cloudUser.id).select().single();
  btn.disabled=false;if(error)return toast('No se pudo guardar: '+error.message);CAT.profile=data;toast('Datos del catálogo guardados');
@@ -190,3 +197,11 @@ function catalogHomeCard(){
 }
 
 function badPhone(p){toast(`El teléfono «${p}» no es un número válido para WhatsApp (le faltan cifras). Contéstale por otra vía.`)}
+
+/* RGPD: conservación limitada de pedidos y mensajes (12 meses cerrados, 24 meses cualquiera) */
+async function purgeOldRequests(){
+ try{const now=Date.now(),d12=new Date(now-365*864e5).toISOString(),d24=new Date(now-730*864e5).toISOString();
+  await sb.from('catalog_requests').delete().eq('owner',cloudUser.id).in('status',['hecho','archivado']).lt('created_at',d12);
+  await sb.from('catalog_requests').delete().eq('owner',cloudUser.id).lt('created_at',d24);
+ }catch(e){console.warn('Limpieza de pedidos antiguos:',e)}
+}
